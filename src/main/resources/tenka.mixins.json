@@ -1,0 +1,9 @@
+{
+  "required": true,
+  "package": "com.vessbon.tenka.mixin",
+  "compatibilityLevel": "JAVA_8",
+  "refmap": "tenka.mixins.refmap.json",
+  "mixins": [],
+  "client": [],
+  "minVersion": "0.7"
+}

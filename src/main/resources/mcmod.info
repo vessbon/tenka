@@ -1,0 +1,16 @@
+[
+{
+  "modid": "tenka",
+  "name": "Tenka",
+  "description": "Simple task automation.",
+  "version": "${version}",
+  "mcversion": "1.8.9",
+  "url": "",
+  "updateUrl": "",
+  "authorList": ["Vessbon"],
+  "credits": "",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}
+]
