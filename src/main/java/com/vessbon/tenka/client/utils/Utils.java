@@ -1,13 +1,18 @@
 package com.vessbon.tenka.client.utils;
 
+import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.BlockPos;
 import net.minecraft.util.MathHelper;
+import net.minecraft.util.MovingObjectPosition;
 import net.minecraft.util.Vec3;
+
+import java.util.Random;
 
 public class Utils {
 
     private static final Minecraft mc = Minecraft.getMinecraft();
+    private static final Random random = new Random();
 
     public static PlayerRotation.Rotation blockPosToYawPitch(BlockPos blockPos, Vec3 playerPos) {
 
@@ -43,7 +48,7 @@ public class Utils {
         return new PlayerRotation.Rotation(finalYaw, finalPitch);
     }
 
-    public static void faceNearestCardinal() {
+    public static float returnNearestCardinalYaw() {
         float yaw = mc.thePlayer.rotationYaw;
         float snappedYaw;
 
@@ -52,6 +57,25 @@ public class Utils {
         else if (yaw >= -135 && yaw < -45) snappedYaw = -90;  // East
         else snappedYaw = 180;                                // North
 
-        mc.thePlayer.rotationYaw = snappedYaw;
+        return snappedYaw;
+    }
+
+    public static BlockMatch getHoveredBlock() {
+        MovingObjectPosition mop = Minecraft.getMinecraft().objectMouseOver;
+
+        if (mop != null && mop.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+            BlockPos targetBlockPos = mop.getBlockPos();
+            Block targetBlock = Minecraft.getMinecraft().theWorld.getBlockState(targetBlockPos).getBlock();
+            if (targetBlockPos == null && targetBlock == null) return null;
+
+            System.out.println("Looking at block: " + targetBlock.getLocalizedName());
+            return new BlockMatch(targetBlock, targetBlockPos);
+        }
+
+        return null;
+    }
+
+    public static float getRandomFloat(float min, float max) {
+        return min + random.nextFloat() * (max - min);
     }
 }

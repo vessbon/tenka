@@ -11,21 +11,15 @@ public class ModKeybinds {
             "Tenka"
     );
 
-    public static final KeyBinding PAUSE_FARM_MACRO = new KeyBinding(
-            "Pause Farming",
+    public static final KeyBinding RESUME_FARM_MACRO = new KeyBinding(
+            "Pause and Resume Farming",
             Keyboard.KEY_K,
             "Tenka"
     );
 
     public static final KeyBinding STOP_FARM_MACRO = new KeyBinding(
             "Stop Farming",
-            Keyboard.KEY_F7,
-            "Tenka"
-    );
-
-    public static final KeyBinding CHECK_TURN = new KeyBinding(
-            "Stop Farming",
-            Keyboard.KEY_H,
+            Keyboard.KEY_X,
             "Tenka"
     );
 

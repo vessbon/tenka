@@ -1,6 +1,7 @@
 package com.vessbon.tenka.client.features.farming;
 
 import com.vessbon.tenka.client.utils.BlockMatch;
+import com.vessbon.tenka.client.utils.Utils;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockCrops;
 import net.minecraft.block.properties.PropertyInteger;
@@ -18,6 +19,7 @@ import java.util.*;
 public class LayoutScanner {
 
     private static final Minecraft mc = Minecraft.getMinecraft();
+
 
     public static boolean isRowAlongX(BlockPos center, int scanRange) {
 
@@ -53,7 +55,7 @@ public class LayoutScanner {
         return xCount >= zCount;
     }
 
-    public static FarmHelper.TurnDirection initialTurnDirection(
+    public static FarmHelper.FarmCommand initialTurnDirection(
             BlockPos startPos, int maxDistance, boolean isAlongX) {
 
         // Decide direction vectors based on axis
@@ -63,7 +65,7 @@ public class LayoutScanner {
         int rightCropCount = countCropsInDirection(startPos, maxDistance, dx, dz);
         int leftCropCount = countCropsInDirection(startPos, maxDistance, -dx, -dz);
 
-        return rightCropCount <= leftCropCount ? FarmHelper.TurnDirection.RIGHT : FarmHelper.TurnDirection.LEFT;
+        return rightCropCount <= leftCropCount ? FarmHelper.FarmCommand.TURN_RIGHT : FarmHelper.FarmCommand.TURN_LEFT;
     }
 
     static int countCropsInDirection(BlockPos pos, int maxDist, int dx, int dz) {
@@ -94,9 +96,12 @@ public class LayoutScanner {
         return count;
     }
 
-    public static boolean checkTurnPointSeedCrops(EntityPlayerSP player, int depth) {
+    public static boolean checkTurnPointSeedCrops(EntityPlayerSP player, int depth, boolean isAlongX) {
 
         int dryStreak = 0;
+
+        int x = 0;
+        int z = 0;
 
         World world = mc.theWorld;
 
@@ -104,11 +109,17 @@ public class LayoutScanner {
         double py = player.posY;
         double pz = player.posZ;
 
+        if (isAlongX) {
+            z = 1;
+        } else {
+            x = 1;
+        }
+
         for (int offset = 1; offset <= depth; offset++) {
 
-            double targetX = px;
+            double targetX = px + (player.getLookVec().xCoord * offset) * x;
             double targetY = py + 1;
-            double targetZ = pz + player.getLookVec().zCoord * offset;
+            double targetZ = pz + (player.getLookVec().zCoord * offset) * z;
 
             BlockPos checkPos = new BlockPos(
                     MathHelper.floor_double(targetX),
@@ -130,6 +141,13 @@ public class LayoutScanner {
         }
 
         return false;
+    }
+
+    public static BlockMatch getHoveredCrop() {
+        BlockMatch matchedBlock = Utils.getHoveredBlock();
+        if (matchedBlock == null) return null;
+        else if (!isCrop(matchedBlock.block)) return null;
+        return matchedBlock;
     }
 
     public static BlockMatch findNearestCropPos(int radius) {

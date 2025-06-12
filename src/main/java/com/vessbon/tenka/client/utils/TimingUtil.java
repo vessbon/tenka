@@ -7,51 +7,24 @@ public class TimingUtil {
 
     private static final Random random = new Random();
 
-    public static void randomSleep(long minMillis, long maxMillis, AtomicBoolean paused) {
+    public static void randomSleep(long minMillis, long maxMillis, AtomicBoolean paused) throws InterruptedException {
+        long sleepTime = minMillis + (long) (Math.random() * (maxMillis - minMillis));
+        long elapsed = 0;
+        long chunk = 50;
 
-        long sleepTime = minMillis + (long) (random.nextDouble() * (maxMillis - minMillis));
-        long startTime = System.currentTimeMillis();
+        while (elapsed < sleepTime) {
+            if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
 
-        long elapsedActiveTime = 0;
-
-        while (elapsedActiveTime < sleepTime && !Thread.currentThread().isInterrupted()) {
             if (paused.get()) {
-                long pauseStartTime = System.currentTimeMillis();
-
-                while (paused.get() && !Thread.currentThread().isInterrupted()) {
-                    try {
-                        Thread.sleep(50);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        System.err.println("Macro sleep interrupted: " + e.getMessage());
-                        return;
-                    }
-                }
-
-                startTime += System.currentTimeMillis() - pauseStartTime;
+                // While paused, just sleep in small increments and keep checking
+                Thread.sleep(chunk);
+                continue;
             }
 
-            long remainingSleep = sleepTime - elapsedActiveTime;
-
-            if (remainingSleep > 0) {
-                try {
-                    Thread.sleep(Math.min(remainingSleep, 50));
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    System.err.println("Macro sleep interrupted: " + e.getMessage());
-                    return;
-                }
-            }
-
-            elapsedActiveTime = System.currentTimeMillis() - startTime;
+            long remaining = sleepTime - elapsed;
+            long sleepDuration = Math.min(chunk, remaining);
+            Thread.sleep(sleepDuration);
+            elapsed += sleepDuration;
         }
-    }
-
-    public static float uniform(float min, float max) {
-        return min + (random.nextFloat() * (max - min));
-    }
-
-    public static double uniform(double min, double max) {
-        return min + (random.nextDouble() * (max - min));
     }
 }

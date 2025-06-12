@@ -20,8 +20,8 @@ public class KeyInputHandler {
             if (ModKeybinds.START_FARM_MACRO.isPressed()) {
                 farmHelperInstance.start();
             }
-            if (ModKeybinds.PAUSE_FARM_MACRO.isPressed()) {
-                farmHelperInstance.pause();
+            if (ModKeybinds.RESUME_FARM_MACRO.isPressed()) {
+                farmHelperInstance.resume();
             }
             if (ModKeybinds.STOP_FARM_MACRO.isPressed()) {
                 farmHelperInstance.stop();

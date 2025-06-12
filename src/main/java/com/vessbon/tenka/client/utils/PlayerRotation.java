@@ -28,8 +28,6 @@ public class PlayerRotation {
                 new RotationData(startRotation, endRotation, startTime, endTime, done)));
     }
 
-
-
     public static class Rotation {
 
         public float yaw;
