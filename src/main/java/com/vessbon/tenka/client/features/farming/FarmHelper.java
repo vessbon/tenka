@@ -4,6 +4,7 @@ import com.vessbon.tenka.client.utils.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.util.BlockPos;
+import net.minecraft.util.EnumFacing;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
@@ -40,7 +41,6 @@ public class FarmHelper  {
 
     private PreviousState lastState;
     private BlockPos lastFarmPos;
-    private int turnTries = 0;
 
     private double lastX, lastY, lastZ;
 
@@ -58,15 +58,16 @@ public class FarmHelper  {
 
     @SubscribeEvent
     public void onKeyInput(InputEvent.KeyInputEvent event) {
-        if (Keyboard.getEventKey() == 112 || Keyboard.getEventKey() == 114) return;
+        int keyCode = Keyboard.getEventKey();
+        if (keyCode == 59 || keyCode == 61) return;
 
         if (running.get() && !paused.get()) {
-            if (Keyboard.getEventKeyState() && !isMacroKey(Keyboard.getEventKey())) {
+            if (Keyboard.getEventKeyState() && !isMacroKey(keyCode)) {
                 pause();
                 System.out.println("Macro paused due to manual key input.");
 
-            } else if (!Keyboard.getEventKeyState() && isMacroKey(Keyboard.getEventKey())) {
-                KeyBinding keyBinding = getKeyBindingFromCode(Keyboard.getEventKey());
+            } else if (!Keyboard.getEventKeyState() && isMacroKey(keyCode)) {
+                KeyBinding keyBinding = getKeyBindingFromCode(keyCode);
                 if (keyBinding == null) return;
 
                 mc.addScheduledTask(() -> InputSimulator.setKeybindState(keyBinding, true));
@@ -109,7 +110,7 @@ public class FarmHelper  {
 
         if (!currentBlockPos.equals(lastBlockPos) && running.get() && !paused.get()) {
 
-            if (hasLeftFarm() && !paused.get()) {
+            if (hasLeftFarm() && !paused.get() && setupDone.get()) {
                 System.out.println("Left the farm");
                 pause();
             }
@@ -119,13 +120,7 @@ public class FarmHelper  {
                         checkTurnPointSeedCrops(mc.thePlayer, 4, currentFarmAxisIsX);
 
                 if (!shouldTurn) {
-                    MovingObjectPosition ray = mc.thePlayer.rayTrace(1.5, 1.0f);
-
-                    if (ray != null && ray.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
-                        lastFarmPos = ray.getBlockPos();
-                    } else {
-                        lastFarmPos = new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY - 0.1, mc.thePlayer.posZ);
-                    }
+                    getLastFarmPos();
 
                     BlockHighlighter.setHighlight(lastFarmPos);
                 }
@@ -204,10 +199,12 @@ public class FarmHelper  {
     public void stop() {
 
         if (running.get()) {
+
             System.out.println("Stopping macro.");
             setupDone.set(false);
             running.set(false);
             paused.set(false);
+            isExecutingTurn.set(false);
 
             if (farmingThread != null && farmingThread.isAlive()) {
                 farmingThread.interrupt();
@@ -219,15 +216,20 @@ public class FarmHelper  {
                     recentKeys.get().clear();
                 });
             }
+
+            commandQueue.offer(FarmCommand.STOP);
+
         } else {
             System.out.println("Macro not running, no need to stop.");
         }
     }
 
     public void prematureStop() {
+
         setupDone.set(false);
         running.set(false);
         paused.set(false);
+        isExecutingTurn.set(false);
 
         if (farmingThread != null && farmingThread.isAlive()) {
             farmingThread.interrupt();
@@ -264,17 +266,21 @@ public class FarmHelper  {
             new PlayerRotation(blockRotation, 200L);
             TimingUtil.randomSleep(300, 500, paused);
 
-            farmRotation = new PlayerRotation.Rotation(
-                    Utils.returnNearestCardinalYaw(), Utils.getRandomFloat(3.5f, 6.5f));
+            // Rotate the player to the proper yaw and pitch for farming
+            float requiredYaw = Utils.returnNearestCardinalYaw();
+            float requiredPitch = Utils.getRandomFloat(3.5f, 6.5f);
+
+            System.out.println(requiredYaw);
+
+            farmRotation = new PlayerRotation.Rotation(requiredYaw, requiredPitch);
+            new PlayerRotation(farmRotation, 100L);
 
             checkInterrupted();
-
-            new PlayerRotation(farmRotation, 100L);
 
             // Determine farm layout axis and initial walking direction
             currentFarmAxisIsX = LayoutScanner.isRowAlongX(origin.pos, 10);
             turnDirection = LayoutScanner.initialTurnDirection(
-                    origin.pos, 250, currentFarmAxisIsX);
+                    origin.pos, 250);
 
             if (turnDirection == FarmCommand.TURN_LEFT) leftTurn();
             else if (turnDirection == FarmCommand.TURN_RIGHT) rightTurn();
@@ -288,6 +294,7 @@ public class FarmHelper  {
 
             checkInterrupted();
 
+            getLastFarmPos();
             setupDone.set(true);
 
             while (running.get()) {
@@ -301,6 +308,10 @@ public class FarmHelper  {
 
                     case RESUME:
                         break; */
+
+                    case STOP:
+                        checkInterrupted();
+                        break;
 
                     case TURN_LEFT:
                         TimingUtil.randomSleep(500, 750, paused);
@@ -415,6 +426,16 @@ public class FarmHelper  {
             }
         }
         return null;
+    }
+
+    private void getLastFarmPos() {
+        MovingObjectPosition ray = mc.thePlayer.rayTrace(1.5, 1.0f);
+
+        if (ray != null && ray.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
+            lastFarmPos = ray.getBlockPos();
+        } else {
+            lastFarmPos = new BlockPos(mc.thePlayer.posX, mc.thePlayer.posY - 0.1, mc.thePlayer.posZ);
+        }
     }
 
     private boolean hasLeftFarm() {

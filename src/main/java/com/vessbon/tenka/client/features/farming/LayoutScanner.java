@@ -14,8 +14,6 @@ import net.minecraft.util.EnumFacing;
 import net.minecraft.util.MathHelper;
 import net.minecraft.world.World;
 
-import java.util.*;
-
 public class LayoutScanner {
 
     private static final Minecraft mc = Minecraft.getMinecraft();
@@ -56,28 +54,33 @@ public class LayoutScanner {
     }
 
     public static FarmHelper.FarmCommand initialTurnDirection(
-            BlockPos startPos, int maxDistance, boolean isAlongX) {
+            BlockPos startPos, int maxDistance) {
 
-        // Decide direction vectors based on axis
-        int dx = isAlongX ? 1 : 0;
-        int dz = isAlongX ? 0 : 1;
+        int leftCropCount = 0;
+        int rightCropCount = 0;
 
-        int rightCropCount = countCropsInDirection(startPos, maxDistance, dx, dz);
-        int leftCropCount = countCropsInDirection(startPos, maxDistance, -dx, -dz);
+        EnumFacing facing = mc.thePlayer.getHorizontalFacing();
+        EnumFacing left = Utils.getCounterClockwise(facing);
+        EnumFacing right = Utils.getClockwise(facing);
 
-        return rightCropCount <= leftCropCount ? FarmHelper.FarmCommand.TURN_RIGHT : FarmHelper.FarmCommand.TURN_LEFT;
+        rightCropCount += countCropsInDirection(startPos, maxDistance, right);
+        leftCropCount += countCropsInDirection(startPos, maxDistance, left);
+
+        System.out.println("Right: " + rightCropCount);
+        System.out.println("Left: " + leftCropCount);
+
+        return rightCropCount >= leftCropCount ? FarmHelper.FarmCommand.TURN_RIGHT : FarmHelper.FarmCommand.TURN_LEFT;
     }
 
-    static int countCropsInDirection(BlockPos pos, int maxDist, int dx, int dz) {
+    private static int countCropsInDirection(BlockPos pos, int scanRange, EnumFacing direction) {
 
         World world = mc.theWorld;
         int count = 0;
         int dryStreak = 0;
 
-        for (int i = 1; i <= maxDist; i++) {
+        for (int i = 1; i <= scanRange; i++) {
 
-            BlockPos check = pos.add(dx * i, 0, dz * i);
-            IBlockState state = world.getBlockState(check);
+            IBlockState state = world.getBlockState(pos.offset(direction, i));
             Block block = state.getBlock();
 
             if (isCrop(block)) {
@@ -89,7 +92,7 @@ public class LayoutScanner {
 
             } else {
                 dryStreak++;
-                if (dryStreak > 6) break;
+                if (dryStreak > 10) break;
             }
         }
 

@@ -1,7 +1,7 @@
 package com.vessbon.tenka.client.utils;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.util.MathHelper;
 import net.minecraftforge.common.MinecraftForge;
 
 public class PlayerRotation {
@@ -19,7 +19,9 @@ public class PlayerRotation {
 
         done = false;
 
-        startRotation = new Rotation(mc.thePlayer.rotationYaw, mc.thePlayer.rotationPitch);
+        startRotation = new Rotation(
+                MathHelper.wrapAngleTo180_float(mc.thePlayer.rotationYaw),
+                MathHelper.wrapAngleTo180_float(mc.thePlayer.rotationPitch));
         endRotation = rotation;
         startTime = System.currentTimeMillis();
         endTime = System.currentTimeMillis() + time;

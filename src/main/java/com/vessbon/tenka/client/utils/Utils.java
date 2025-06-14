@@ -2,10 +2,7 @@ package com.vessbon.tenka.client.utils;
 
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
-import net.minecraft.util.BlockPos;
-import net.minecraft.util.MathHelper;
-import net.minecraft.util.MovingObjectPosition;
-import net.minecraft.util.Vec3;
+import net.minecraft.util.*;
 
 import java.util.Random;
 
@@ -50,17 +47,22 @@ public class Utils {
 
     public static float returnNearestCardinalYaw() {
         float yaw = mc.thePlayer.rotationYaw;
+        yaw = MathHelper.wrapAngleTo180_float(yaw);
+
+        System.out.println(yaw);
+
         float snappedYaw;
 
-        if (yaw >= -45 && yaw < 45) snappedYaw = 0;           // South
-        else if (yaw >= 45 && yaw < 135) snappedYaw = 90;     // West
-        else if (yaw >= -135 && yaw < -45) snappedYaw = -90;  // East
-        else snappedYaw = 180;                                // North
+        if (yaw >= -45 && yaw < 45) snappedYaw = 0f;        // SOUTH
+        else if (yaw >= 45 && yaw < 135) snappedYaw = 90f;     // WEST
+        else if (yaw >= -135 && yaw < -45) snappedYaw = -90f; // EAST
+        else snappedYaw = 180f;                                // NORTH
 
         return snappedYaw;
     }
 
     public static BlockMatch getHoveredBlock() {
+
         MovingObjectPosition mop = Minecraft.getMinecraft().objectMouseOver;
 
         if (mop != null && mop.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK) {
@@ -77,5 +79,25 @@ public class Utils {
 
     public static float getRandomFloat(float min, float max) {
         return min + random.nextFloat() * (max - min);
+    }
+
+    public static EnumFacing getClockwise(EnumFacing facing) {
+        switch (facing) {
+            case NORTH: return EnumFacing.EAST;
+            case EAST: return EnumFacing.SOUTH;
+            case SOUTH: return EnumFacing.WEST;
+            case WEST: return EnumFacing.NORTH;
+            default: return facing;
+        }
+    }
+
+    public static EnumFacing getCounterClockwise(EnumFacing facing) {
+        switch (facing) {
+            case NORTH: return EnumFacing.WEST;
+            case WEST: return EnumFacing.SOUTH;
+            case SOUTH: return EnumFacing.EAST;
+            case EAST: return EnumFacing.NORTH;
+            default: return facing;
+        }
     }
 }

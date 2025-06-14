@@ -1,7 +1,7 @@
 package com.vessbon.tenka.client.utils;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.util.MathHelper;
 import net.minecraftforge.client.event.RenderWorldLastEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -24,6 +24,8 @@ public class PlayerRotationUtil {
         this.startTime = rotationData.startTime;
         this.endTime = rotationData.endTime;
         this.done = rotationData.done;
+
+        System.out.println(this.startRotation);
     }
 
     @SubscribeEvent
@@ -52,7 +54,7 @@ public class PlayerRotationUtil {
         float spentMillis = (float) (System.currentTimeMillis() - startTime);
         float relativeProgress = spentMillis / (float) (endTime - startTime);
 
-        return (end - start) * easeOutCubic((double) relativeProgress) + start;
+        return MathHelper.wrapAngleTo180_float(end - start) * easeOutCubic(relativeProgress) + start;
     }
 
     private float easeOutCubic(double number) {
