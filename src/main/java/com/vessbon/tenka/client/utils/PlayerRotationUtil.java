@@ -40,9 +40,14 @@ public class PlayerRotationUtil {
             mc.thePlayer.rotationYaw = interpolate(startRotation.yaw, endRotation.yaw);
             mc.thePlayer.rotationPitch = interpolate(startRotation.pitch, endRotation.pitch);
 
+            mc.thePlayer.rotationYawHead = mc.thePlayer.rotationYaw;
+
         } else if (!done) {
             mc.thePlayer.rotationYaw = endRotation.yaw;
             mc.thePlayer.rotationPitch = endRotation.pitch;
+
+            mc.thePlayer.rotationYawHead = endRotation.yaw;
+
             this.done = true;
 
         } else {

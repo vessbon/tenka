@@ -137,7 +137,6 @@ public class LayoutScanner {
                 // Not enough crops here, so this is the turn point
                 dryStreak++;
                 if (dryStreak > 3) {
-                    System.out.println("Turning");
                     return true;
                 }
             }

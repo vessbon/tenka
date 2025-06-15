@@ -78,7 +78,32 @@ public class Utils {
     }
 
     public static float getRandomFloat(float min, float max) {
+
+        if (min > max) {
+            throw new IllegalArgumentException("Max must be greater than or equal to min");
+        }
+
         return min + random.nextFloat() * (max - min);
+    }
+
+
+    public static long getRandomLong(long min, long max) {
+
+        if (min > max) {
+            throw new IllegalArgumentException("Max must be greater than or equal to min");
+        }
+
+        long bound = max - min + 1;
+        long result;
+
+        long bits;
+        do {
+            bits = random.nextLong() >>> 1; // make it non-negative
+            result = bits % bound;
+        } while (bits - result + (bound - 1) < 0L); // reject overflows
+
+        long finalValue = min + result;
+        return finalValue;
     }
 
     public static EnumFacing getClockwise(EnumFacing facing) {

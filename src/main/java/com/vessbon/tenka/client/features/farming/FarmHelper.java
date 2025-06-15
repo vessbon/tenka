@@ -4,13 +4,15 @@ import com.vessbon.tenka.client.utils.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.util.BlockPos;
-import net.minecraft.util.EnumFacing;
 import net.minecraft.util.MovingObjectPosition;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -26,13 +28,13 @@ public class FarmHelper  {
 
     private static final Minecraft mc = Minecraft.getMinecraft();
 
-    private AtomicBoolean setupDone = new AtomicBoolean(false);
-    private AtomicBoolean running = new AtomicBoolean(false);
-    private AtomicBoolean paused = new AtomicBoolean(false);
-    private AtomicReference<Set<KeyBinding>> recentKeys =
+    private final AtomicBoolean setupDone = new AtomicBoolean(false);
+    private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean paused = new AtomicBoolean(false);
+    private final AtomicReference<Set<KeyBinding>> recentKeys =
             new AtomicReference<>(new CopyOnWriteArraySet<>());
 
-    private BlockingQueue<FarmCommand> commandQueue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<FarmCommand> commandQueue = new LinkedBlockingQueue<>();
     private final AtomicBoolean isExecutingTurn = new AtomicBoolean(false);
 
     private boolean currentFarmAxisIsX;
@@ -42,7 +44,8 @@ public class FarmHelper  {
     private PreviousState lastState;
     private BlockPos lastFarmPos;
 
-    private double lastX, lastY, lastZ;
+    private List<DelayedMainThreadTask> delayedTasks = new ArrayList<>();
+    private long currentTickCounter = 0; // To track ticks for precise scheduling
 
 
     public FarmHelper() {
@@ -62,11 +65,11 @@ public class FarmHelper  {
         if (keyCode == 59 || keyCode == 61) return;
 
         if (running.get() && !paused.get()) {
-            if (Keyboard.getEventKeyState() && !isMacroKey(keyCode)) {
+            if (Keyboard.getEventKeyState() && !isHelperKey(keyCode)) {
                 pause();
-                System.out.println("Macro paused due to manual key input.");
+                System.out.println("Helper paused due to manual key input.");
 
-            } else if (!Keyboard.getEventKeyState() && isMacroKey(keyCode)) {
+            } else if (!Keyboard.getEventKeyState() && isHelperKey(keyCode)) {
                 KeyBinding keyBinding = getKeyBindingFromCode(keyCode);
                 if (keyBinding == null) return;
 
@@ -78,13 +81,12 @@ public class FarmHelper  {
     @SubscribeEvent
     public void onMouseInput(InputEvent.MouseInputEvent event) {
         if (running.get() && !paused.get()) {
-            int button = org.lwjgl.input.Mouse.getEventButton();
             boolean state = org.lwjgl.input.Mouse.getEventButtonState();
 
             if (state) {
                 if (!paused.get()) {
                     pause();
-                    System.out.println("Macro paused due to mouse click.");
+                    System.out.println("Helper paused due to mouse click.");
                 }
             }
         }
@@ -95,7 +97,7 @@ public class FarmHelper  {
         if (running.get() && !paused.get()) {
             if (!paused.get()) {
                 pause();
-                System.out.println("Macro paused due to mouse movement or scroll.");
+                System.out.println("Helper paused due to mouse movement or scroll.");
             }
         }
     }
@@ -106,63 +108,77 @@ public class FarmHelper  {
         if (event.phase != TickEvent.Phase.END || event.player != mc.thePlayer) return;
 
         BlockPos currentBlockPos = event.player.getPosition();
-        BlockPos lastBlockPos = new BlockPos(lastX, lastY, lastZ);
 
-        if (!currentBlockPos.equals(lastBlockPos) && running.get() && !paused.get()) {
+        if (!currentBlockPos.equals(lastFarmPos) && running.get() && !paused.get()) {
+            if (setupDone.get()) {
+                if (hasLeftFarm() && !paused.get()) {
+                    System.out.println("You left the farm, pausing.");
+                    pause();
+                }
 
-            if (hasLeftFarm() && !paused.get() && setupDone.get()) {
-                System.out.println("Left the farm");
-                pause();
-            }
-
-            if (!isExecutingTurn.get() && setupDone.get()) {
                 boolean shouldTurn = LayoutScanner.
                         checkTurnPointSeedCrops(mc.thePlayer, 4, currentFarmAxisIsX);
 
-                if (!shouldTurn) {
-                    getLastFarmPos();
-
-                    BlockHighlighter.setHighlight(lastFarmPos);
+                if (!shouldTurn && isExecutingTurn.get()) {
+                    isExecutingTurn.set(false);
                 }
 
-                if (currentBlockPos != null && shouldTurn) {
-                    isExecutingTurn.set(true);
+                if (!isExecutingTurn.get()) {
 
-                    if (turnDirection == FarmCommand.TURN_LEFT)  {
-                        sendCommand(FarmCommand.TURN_RIGHT);
-                    } else if (turnDirection == FarmCommand.TURN_RIGHT) {
-                        sendCommand(FarmCommand.TURN_LEFT);
+                    if (shouldTurn) {
+                        isExecutingTurn.set(true);
+
+                        if (turnDirection == FarmCommand.TURN_LEFT) {
+                            sendCommand(FarmCommand.TURN_RIGHT);
+                        } else if (turnDirection == FarmCommand.TURN_RIGHT) {
+                            sendCommand(FarmCommand.TURN_LEFT);
+                        }
+                    } else {
+                        getLastFarmPos();
+                        BlockHighlighter.setHighlight(lastFarmPos);
                     }
                 }
             }
         }
+    }
 
-        // Update last position for the next tick
-        lastX = event.player.posX;
-        lastY = event.player.posY;
-        lastZ = event.player.posZ;
+    @SubscribeEvent
+    public void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) {
+            currentTickCounter++; // Increment tick counter
+
+            // Use an iterator to safely remove elements during iteration
+            Iterator<DelayedMainThreadTask> iterator = delayedTasks.iterator();
+            while (iterator.hasNext()) {
+                DelayedMainThreadTask task = iterator.next();
+                if (currentTickCounter >= task.targetTick) {
+                    mc.addScheduledTask(task.runnable);
+                    iterator.remove(); // Remove the task after scheduling for execution
+                }
+            }
+        }
     }
 
     public void start() {
 
         if (!running.get()) {
-            System.out.println("Activating macro.");
+            System.out.println("Activating helper.");
             paused.set(false);
 
             farmingThread = new Thread(this::runLogic, "FarmingThread");
             farmingThread.start();
         } else {
-            System.out.println("Macro is already running.");
+            System.out.println("Helper is already running.");
         }
     }
 
     public void pause() {
 
         if (!running.get()) {
-            System.out.println("Macro not running, cannot pause.");
+            System.out.println("Helper not running, cannot pause.");
             return;
         } else if (paused.get()) {
-            System.out.println("Macro is already paused, cannot pause.");
+            System.out.println("Helper is already paused, cannot pause.");
             return;
         } else if (lastFarmPos == null || turnDirection == null) {
             System.out.println("Last farm pos or previous turn direction does not exist, cannot pause.");
@@ -170,28 +186,28 @@ public class FarmHelper  {
         }
 
         paused.set(true);
-        System.out.println("Pausing macro.");
+        System.out.println("Pausing helper.");
 
         lastState = new PreviousState(lastFarmPos, turnDirection);
-        mc.addScheduledTask(this::releaseAllCommonKeys);
+        releaseAllCommonKeys();
 
         // sendCommand(FarmCommand.PAUSE);
     }
 
     public void resume() {
         if (!running.get()) {
-            System.out.println("Macro not running, cannot resume.");
+            System.out.println("Helper not running, cannot resume.");
             return;
         } else if (!paused.get()) {
-            System.out.println("Macro is already running, cannot resume.");
+            System.out.println("Helper is already running, cannot resume.");
             return;
         }
 
         paused.set(false);
-        System.out.println("Resuming macro.");
+        System.out.println("Resuming helper.");
 
         restoreState(lastState);
-        mc.addScheduledTask(this::repressRecentKeys);
+        repressRecentKeys();
 
         // sendCommand(FarmCommand.RESUME);
     }
@@ -200,36 +216,28 @@ public class FarmHelper  {
 
         if (running.get()) {
 
-            System.out.println("Stopping macro.");
-            setupDone.set(false);
-            running.set(false);
-            paused.set(false);
-            isExecutingTurn.set(false);
+            System.out.println("Stopping helper.");
+            cleanup();
 
             if (farmingThread != null && farmingThread.isAlive()) {
                 farmingThread.interrupt();
             }
 
             if (mc.thePlayer != null && mc.gameSettings != null) {
-                mc.addScheduledTask(() -> {
-                    releaseAllCommonKeys();
-                    recentKeys.get().clear();
-                });
+                releaseAllCommonKeys();
+                recentKeys.get().clear();
             }
 
             commandQueue.offer(FarmCommand.STOP);
 
         } else {
-            System.out.println("Macro not running, no need to stop.");
+            System.out.println("Helper not running, no need to stop.");
         }
     }
 
     public void prematureStop() {
 
-        setupDone.set(false);
-        running.set(false);
-        paused.set(false);
-        isExecutingTurn.set(false);
+        cleanup();
 
         if (farmingThread != null && farmingThread.isAlive()) {
             farmingThread.interrupt();
@@ -263,8 +271,8 @@ public class FarmHelper  {
             PlayerRotation.Rotation blockRotation = Utils.blockPosToYawPitch(
                     origin.pos, mc.thePlayer.getPositionVector());
 
-            new PlayerRotation(blockRotation, 200L);
-            TimingUtil.randomSleep(300, 500, paused);
+            new PlayerRotation(blockRotation, 400L);
+            TimingUtil.randomSleep(800, 900, paused);
 
             // Rotate the player to the proper yaw and pitch for farming
             float requiredYaw = Utils.returnNearestCardinalYaw();
@@ -273,7 +281,12 @@ public class FarmHelper  {
             System.out.println(requiredYaw);
 
             farmRotation = new PlayerRotation.Rotation(requiredYaw, requiredPitch);
-            new PlayerRotation(farmRotation, 100L);
+            new PlayerRotation(farmRotation, 800L);
+
+            TimingUtil.randomSleep(500, 800, paused);
+            mc.addScheduledTask(() -> InputSimulator.setKeybindState(mc.gameSettings.keyBindForward, true));
+            TimingUtil.randomSleep(70, 115, paused);
+            mc.addScheduledTask(() -> InputSimulator.setKeybindState(mc.gameSettings.keyBindForward, false));
 
             checkInterrupted();
 
@@ -314,19 +327,17 @@ public class FarmHelper  {
                         break;
 
                     case TURN_LEFT:
-                        TimingUtil.randomSleep(500, 750, paused);
+                        System.out.println("Turning left");
+                        TimingUtil.randomSleep(200, 400, paused);
                         if (!paused.get()) leftTurn();
                         turnDirection = FarmCommand.TURN_LEFT;
-                        TimingUtil.randomSleep(1000, 1500, paused);
-                        isExecutingTurn.set(false);
                         break;
 
                     case TURN_RIGHT:
-                        TimingUtil.randomSleep(500, 750, paused);
+                        System.out.println("Turning right");
+                        TimingUtil.randomSleep(200, 400, paused);
                         if (!paused.get()) rightTurn();
                         turnDirection = FarmCommand.TURN_RIGHT;
-                        TimingUtil.randomSleep(1000, 1500, paused);
-                        isExecutingTurn.set(false);
                         break;
 
                     default:
@@ -337,70 +348,75 @@ public class FarmHelper  {
             }
 
         } catch (InterruptedException e) {
-            System.err.println("Macro was completely stopped: " + e);
+            System.err.println("Helper was completely stopped: " + e);
             farmingThread = null;
         } catch (Exception e) {
-            System.err.println("Error in macro logic: " + e);
+            System.err.println("Error in helper logic: " + e);
             farmingThread = null;
         }
     }
 
     private void leftTurn() {
-        mc.addScheduledTask(() -> {
+        scheduleTaskOnMainThread(() -> {
             InputSimulator.setKeybindState(mc.gameSettings.keyBindRight, false);
             recentKeys.get().remove(mc.gameSettings.keyBindRight);
+        }, 0);
 
+        scheduleTaskOnMainThread(() -> {
             InputSimulator.setKeybindState(mc.gameSettings.keyBindLeft, true);
             recentKeys.get().add(mc.gameSettings.keyBindLeft);
-        });
+        }, Utils.getRandomLong(5L, 15L));
     }
 
     private void rightTurn() {
-        mc.addScheduledTask(() -> {
+        scheduleTaskOnMainThread(() -> {
             InputSimulator.setKeybindState(mc.gameSettings.keyBindLeft, false);
             recentKeys.get().remove(mc.gameSettings.keyBindLeft);
+        }, 0);
 
+        scheduleTaskOnMainThread(() -> {
             InputSimulator.setKeybindState(mc.gameSettings.keyBindRight, true);
             recentKeys.get().add(mc.gameSettings.keyBindRight);
-        });
+        }, Utils.getRandomLong(5L, 15L));
     }
 
     private void releaseAllCommonKeys() {
-        if (mc.gameSettings != null) {
-            InputSimulator.holdAttack(false);
-            for (KeyBinding key : recentKeys.get()) {
-                if (key != null) {
+        if (mc.gameSettings == null) return;
+        // scheduleTaskOnMainThread(() -> InputSimulator.holdAttack(false), 0);
+        KeyBinding[] keysToRelease = recentKeys.get().toArray(new KeyBinding[0]);
+        for (int i = 0; i < keysToRelease.length; i++) {
+            final KeyBinding key = keysToRelease[i];
+            if (key != null) {
+                scheduleTaskOnMainThread(() -> {
                     InputSimulator.setKeybindState(key, false);
-                }
+                }, 1L * (i + 1));
             }
         }
     }
 
     private void repressRecentKeys() {
-        if (mc.gameSettings != null) {
-            // InputSimulator.holdAttack(true); enable later plz
-            System.out.println(recentKeys.get());
-            for (KeyBinding key : recentKeys.get()) {
-                if (key != null) {
+        if (mc.gameSettings == null) return;
+        // scheduleTaskOnMainThread(() -> InputSimulator.holdAttack(true), 0);
+        KeyBinding[] keysToRepress = recentKeys.get().toArray(new KeyBinding[0]);
+        for (int i = 0; i < keysToRepress.length; i++) {
+            final KeyBinding key = keysToRepress[i];
+            if (key != null) {
+                scheduleTaskOnMainThread(() -> {
                     InputSimulator.setKeybindState(key, true);
-                }
+                }, 1L * (i + 1));
             }
         }
     }
 
-    public static class PreviousState {
-
-        public BlockPos pos;
-        public FarmCommand lastTurnDirection;
-
-        public PreviousState(BlockPos lastGroundBlock, FarmCommand lastTurnDirection) {
-            this.pos = lastGroundBlock.add(0, 1, 0);
-            this.lastTurnDirection = lastTurnDirection;
+    private void scheduleTaskOnMainThread(Runnable task, long ticksDelay) {
+        long targetTick = currentTickCounter + ticksDelay;
+        synchronized (delayedTasks) { // Synchronize access to delayedTasks to prevent concurrent modification
+            delayedTasks.add(new DelayedMainThreadTask(task, targetTick));
         }
     }
 
     public void restoreState(PreviousState state) {
-        new PlayerRotation(farmRotation, 10L);
+        new PlayerRotation(farmRotation, 800L);
         turnDirection = state.lastTurnDirection;
     }
 
@@ -408,9 +424,9 @@ public class FarmHelper  {
         commandQueue.offer(command);
     }
 
-    public boolean isMacroKey(int keyCode) {
-        Set<KeyBinding> macroKeys = recentKeys.get();
-        for (KeyBinding key : macroKeys) {
+    public boolean isHelperKey(int keyCode) {
+        Set<KeyBinding> helperKeys = recentKeys.get();
+        for (KeyBinding key : helperKeys) {
             if (key != null && key.getKeyCode() == keyCode) {
                 return true;
             }
@@ -445,7 +461,42 @@ public class FarmHelper  {
         return distance > 80;
     }
 
+    private void cleanup() {
+        lastFarmPos = null;
+        setupDone.set(false);
+        running.set(false);
+        paused.set(false);
+        isExecutingTurn.set(false);
+
+        synchronized (delayedTasks) {
+            delayedTasks.clear();
+        }
+
+        currentTickCounter = 0;
+    }
+
     public enum FarmCommand {
-        STOP, PAUSE, RESUME, TURN_LEFT, TURN_RIGHT;
+        STOP, PAUSE, RESUME, TURN_LEFT, TURN_RIGHT
+    }
+
+    public static class PreviousState {
+
+        public BlockPos pos;
+        public FarmCommand lastTurnDirection;
+
+        public PreviousState(BlockPos lastGroundBlock, FarmCommand lastTurnDirection) {
+            this.pos = lastGroundBlock.add(0, 1, 0);
+            this.lastTurnDirection = lastTurnDirection;
+        }
+    }
+
+    private static class DelayedMainThreadTask {
+        Runnable runnable;
+        long targetTick;
+
+        public DelayedMainThreadTask(Runnable runnable, long targetTick) {
+            this.runnable = runnable;
+            this.targetTick = targetTick;
+        }
     }
 }
