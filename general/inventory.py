@@ -42,3 +42,7 @@ def compare_items(item1: ItemStack, item2: ItemStack) -> bool:
     if item1_custom_name == item2_custom_name:
         return True
     return False
+
+def full_check():
+    inventory = ms.player_inventory()
+    return len(inventory) > 35

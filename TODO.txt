@@ -1,0 +1,9 @@
+TODO: Refactor EVERYTHING :(
+TODO: Add velocity change failsafe
+TODO: Automatic direction check (important for resetting)
+TODO: Fix reset relying on direction, when row start gets calculated separately
+TODO: Make idle checking logic simpler, right now it's scattered over multiple places,
+        it should only detect idling when not falling
+TODO: Centralize fall_start_time and falling variables into one place
+TODO: Add full inventory failsafe
+TODO: Convert code in inventory.py to

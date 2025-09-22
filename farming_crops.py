@@ -12,6 +12,7 @@ import queue
 import sys
 import math
 import time
+import threading
 
 # All supported start blocks
 SUPPORTED_CROPS = {
@@ -44,6 +45,10 @@ if start_block_type not in SUPPORTED_CROPS.values(): raise Exception("Not a supp
 debugging = False
 if len(sys.argv) > 2 and sys.argv[2]:
     debugging = True
+
+macro_checking = False
+if len(sys.argv) > 3 and sys.argv[3]:
+    macro_checking = True
 farming = True
 
 
@@ -110,6 +115,36 @@ def update_row_data(rows : list) -> tuple[int, int]:
 
 def get_valid_rows(rows : list, player_y : float | int) -> list:
     return [r for r in rows if r <= int(player_y)]
+
+
+def macro_checker():
+    global farming
+
+    while True:
+        if not farming:
+            break
+
+        time.sleep(random.uniform(5, 10)) # macro check frequency
+
+        check = math.ceil(random.random() * 5)
+        if check == 1:
+            ms.echo("GUI check")
+            ms.player_inventory()
+        elif check == 2:
+            ms.echo("Check 2")
+        elif check == 3:
+            ms.echo("Check 3")
+        elif check == 4:
+            ms.echo("Check 4")
+        elif check == 5:
+            ms.echo("Check 5")
+        else:
+            ms.echo("Invalid check.")
+
+
+if macro_checking:
+    thread = threading.Thread(target=macro_checker, daemon=True)
+    thread.start()
 
 
 with ms.EventQueue() as event_queue:
@@ -243,15 +278,16 @@ with ms.EventQueue() as event_queue:
 
 
         # Attempt to retrieve the last block
-        if rows_left == 0 and last_farm_block is None and not falling:
+        if rows_left == 0 and last_farm_block is None and not falling and fall_start_time is None:
             current_row_y = ALL_ROWS[current_row - 1]
+            ms.echo(movement_handler.direction)
 
             last_farm_block = get_row_end(
                 start_block.position,
                 current_row_y,
                 start_yaw,
                 start_block_type,
-                movement_handler.direction,
+                movement_handler.direction
             )
 
             if last_farm_block is not None:
@@ -267,7 +303,7 @@ with ms.EventQueue() as event_queue:
             fall_start_time = time.time()
 
         # Cooldown between falling and reversing direction
-        if fall_start_time is not None and time.time() - fall_start_time > random.uniform(0.5, 2.5):
+        if fall_start_time is not None and time.time() - fall_start_time > random.uniform(0.5, 2):
             # Reverse movement
             movement_handler.reverse_direction()
             fall_start_time = None
@@ -275,49 +311,51 @@ with ms.EventQueue() as event_queue:
         # -- MOVEMENT STOPPED UNINTENTIONALLY FAILSAFE --
         if not falling and fall_start_time is None:
             idle = idle_checker.update(player.velocity)
+
             if idle and not is_at_last_block:
-                block_below_player = player.block_pos_below()
-                is_at_last_block = is_within_radius(block_below_player, last_farm_block, 5)
+                if last_farm_block is not None:
+                    block_below_player = player.block_pos_below()
+                    is_at_last_block = is_within_radius(block_below_player, last_farm_block, 5)
 
-                # -- REACHED FARM END LOGIC --
-                if last_farm_block is not None and is_at_last_block:
-                    ms.echo("Reached the end of the farm, teleporting to start.")
-                    ms.execute("tp Spoonsky -124.7 49 -112.7")
-                    #ms.execute("warp garden")
+                    # -- REACHED FARM END LOGIC --
+                    if last_farm_block is not None and is_at_last_block:
+                        ms.echo("Reached the end of the farm, teleporting to start.")
+                        ms.execute("tp Spoonsky -124.7 49 -112.7")
+                        #ms.execute("warp garden")
 
-                    # Reset distance logging so no failsafe triggers after teleport
-                    start_time = time.time()
-                    while True:
+                        # Reset distance logging so no failsafe triggers after teleport
+                        start_time = time.time()
+                        while True:
+                            player.update(ms.get_player())
+                            current_block = get_actual_block(ms.player_position())
+
+                            # Check if the block below player has changed, for this farm, only y value is important
+                            if current_block[1] - 1 != block_below_player[1]:
+                                break
+                            if time.time() - start_time > 2:
+                                stop_farming("Teleport failed. Pausing macro.")
+                                break
+                            time.sleep(TICK_TIME)
+
                         player.update(ms.get_player())
-                        current_block = get_actual_block(ms.player_position())
+                        logged_position = player.position
+                        last_log_time = time.time()
 
-                        # Check if the block below player has changed, for this farm, only y value is important
-                        if current_block[1] - 1 != block_below_player[1]:
-                            break
-                        if time.time() - start_time > 2:
-                            stop_farming("Teleport failed. Pausing macro.")
-                            break
-                        time.sleep(TICK_TIME)
+                        # Move in the initial direction, aka farm start direction
+                        is_at_last_block = False
+                        movement_handler.apply_initial_direction()
 
-                    player.update(ms.get_player())
-                    logged_position = player.position
-                    last_log_time = time.time()
+                        # Reset row data
+                        valid_rows = get_valid_rows(ALL_ROWS, logged_position[1] + 1)
+                        if debugging:
+                            ms.echo(f"Valid rows: {valid_rows}")
+                        current_row, rows_left = update_row_data(valid_rows)
 
-                    # Move in the initial direction, aka farm start direction
-                    is_at_last_block = False
-                    movement_handler.apply_initial_direction()
-
-                    # Reset row data
-                    valid_rows = get_valid_rows(ALL_ROWS, logged_position[1] + 1)
-                    if debugging:
-                        ms.echo(f"Valid rows: {valid_rows}")
-                    current_row, rows_left = update_row_data(valid_rows)
-
-                    previous_y = player.y
+                        previous_y = player.y
 
                 else:
                     stop_farming("Macro interrupted by idling."
-                                " If this was not you, it might be a macro check. Pausing macro.")
+                                 " If this was not you, it might be a macro check. Pausing macro.")
 
         # Detect landing (block under player)
         if falling:
@@ -338,6 +376,7 @@ with ms.EventQueue() as event_queue:
 
                 # `landing_cooldown` seconds after landing
                 elif time.time() - landing_start_time >= landing_cooldown:
+                    idle_checker.update(player.velocity)
                     falling = False
                     previous_y = player.y
                     landing_start_time = None
