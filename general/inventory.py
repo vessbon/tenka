@@ -1,6 +1,6 @@
 import system.lib.minescript as ms
 from system.lib.minescript import ItemStack
-from utils.lib_nbt import parse_snbt
+from general.lib_nbt import parse_snbt
 
 
 def get_nbt(item: ItemStack) -> str:

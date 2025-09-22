@@ -93,9 +93,9 @@ def parse_snbt(nbt_str: str) -> Dict:
         if len(context) > 1:
           context.pop()
       elif token == ",":
-        pass # TODO(maxuser): add error-checking so comma isn't optional
+        pass
       elif token == ":":
-        pass # TODO(maxuser): add error-checking so colon isn't optional
+        pass
       else:
         process_value(token)
   except Exception as e:

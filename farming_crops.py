@@ -2,11 +2,11 @@ import system.lib.minescript as ms
 from system.lib.minescript import EventType
 from system.lib.minescript import BlockPos
 
-from utils.player import Player
-import utils.inventory as inventory
-from utils.utils import get_direction_vectors, get_actual_block
-from utils.utils import is_within_radius
-from utils.movement import *
+from general.player import Player
+import general.inventory as inventory
+from general.utils import get_direction_vectors, get_actual_block
+from general.utils import is_within_radius
+from general.movement import *
 import random
 import queue
 import sys
